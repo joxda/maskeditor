@@ -14,6 +14,8 @@ from glob import glob
 import sys
 
 files = []
+data = []
+
 if len(sys.argv)>1:
     files = glob(sys.argv[1])
 
@@ -32,16 +34,25 @@ global_vmin = 0
 global_vmax = 0
 
 shift_pressed = False
+i_pressed = False
 
 def on_key(event):
     global shift_pressed
+    global i_pressed
     if event.key=="shift":
         shift_pressed = True
+    if event.key=="i":
+        i_pressed = True
+        print("i")
 
 def off_key(event):
     global shift_pressed
+    global i_pressed
     if event.key=="shift":
         shift_pressed = False
+    if event.key=="i":
+        i_pressed = False
+        print("I")
 
 
 def change_lim(event):
@@ -63,7 +74,32 @@ def change_lim(event):
     plt.imshow(log10(data+0.0001), origin='lower', cmap='gray',vmin=global_vmin, vmax=global_vmax)
     plt.draw()
 
+def isophotal(level):
+    #data_re=rebin(data[0].data,(100,100),)
+    tophat_kernel = Tophat2DKernel(5)
+    data_re = convolve(data, tophat_kernel)
+    #data_re = data
+    #print(level)
+    pix_ind=where(floor(log10(data_re)*50)==floor(log10(level)*50))
+    #print(pix_ind)
+    X = array(pix_ind[1])
+    Y = array(pix_ind[0])
+    #plt.plot(X,Y,'.')
+    ipars = fit_ellipse(X,Y)
+    ell = plot_ellipse(plt.gca(),ipars)
+    plt.draw()
+    
 def onclick(event):
+  global i_pressed
+  if i_pressed:
+    xpos = int(event.xdata)
+    ypos = int(event.ydata)
+
+    level = median(data[ypos-2:ypos+3,xpos-2:xpos+2])
+    
+    isophotal(level)
+    
+  else:
     global x_plot
     global y_plot
     global pars
