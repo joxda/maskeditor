@@ -14,7 +14,6 @@ from glob import glob
 import sys
 
 files = []
-data = []
 
 if len(sys.argv)>1:
     files = glob(sys.argv[1])
@@ -76,6 +75,7 @@ def change_lim(event):
 
 def isophotal(level):
     #data_re=rebin(data[0].data,(100,100),)
+    global data
     tophat_kernel = Tophat2DKernel(5)
     data_re = convolve(data, tophat_kernel)
     #data_re = data
@@ -88,22 +88,23 @@ def isophotal(level):
     ipars = fit_ellipse(X,Y)
     ell = plot_ellipse(plt.gca(),ipars)
     plt.draw()
-    
+
 def onclick(event):
   global i_pressed
+  global data
   if i_pressed:
     xpos = int(event.xdata)
     ypos = int(event.ydata)
 
     level = median(data[ypos-2:ypos+3,xpos-2:xpos+2])
-    
+
     isophotal(level)
-    
+
   else:
     global x_plot
     global y_plot
     global pars
-    global data
+    #global data
     global select_dat
 
     elements = plt.gca().get_children()
