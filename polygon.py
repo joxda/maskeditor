@@ -14,6 +14,9 @@ from glob import glob
 import sys
 
 files = []
+# xpaget ds9 iexam coordinate image
+# TRY:
+# d.get('iexam coordinate image')
 
 if len(sys.argv)>1:
     files = glob(sys.argv[1])
@@ -26,7 +29,9 @@ def rebin(a, shape):
 
 x_plot=[]
 y_plot=[]
+polygons=[]
 data=array([[],[]])
+allmask=array([[],[]])
 
 shift_pressed = False
 i_pressed = False
@@ -88,6 +93,7 @@ def isophotal(level):
 def onclick(event):
   global i_pressed
   global data
+  global allmask
   if i_pressed:
     xpos = int(event.xdata)
     ypos = int(event.ydata)
@@ -95,10 +101,19 @@ def onclick(event):
     level = median(data[ypos-2:ypos+3,xpos-2:xpos+2])
 
     isophotal(level)
+  elif shift_pressed:
+    xpos = int(event.xdata)
+    ypos = int(event.ydata)
+
+    mask_value = allmask[ypos,xpos]
+    ind = where(allmask==mask_value)
+    allmask[ind] = 0
+
 
   else:
     global x_plot
     global y_plot
+    global polygons
     global pars
     #global data
     global select_dat
@@ -106,12 +121,7 @@ def onclick(event):
     elements = plt.gca().get_children()
 
     if event.dblclick:
-        ind_ima = where(array([isinstance(i,AxesImage) for i in elements]))[0]
-        elements[ind_ima[-1]].remove()
-        global_vmin=0
-        global_vmax=log10(data.max())
-        plt.imshow(log10(data+0.0001), origin='lower', cmap='gray',vmin=global_vmin, vmax=global_vmax)
-
+        polygons.append([(y,x) for x,y in zip(x_plot,y_plot)])
     else:
 
 
@@ -123,15 +133,8 @@ def onclick(event):
         #      ('double' if event.dblclick else 'single', event.button,
         #       event.x, event.y, event.xdata, event.ydata))
 
-        if event.button == 3 and len(x_plot)>0:
-            x_plot=x_plot[:-1]
-            y_plot=y_plot[:-1]
-            select_dat=select_dat[:-1]
-
-            if(len(x_plot)<5) and ind_ellipse.shape[0] == 1:
-                elements[ind_ellipse[0]].remove()
-                if ind_points.shape[0] > 1:
-                    elements[ind_points[1]].remove()
+        if event.button == 3:
+            polygons = polygons[:-1]
         else:
             x_plot.append(event.xdata)
             y_plot.append(event.ydata)
@@ -174,16 +177,17 @@ def onclick(event):
 
         width=data.shape[0]
         height=data.shape[1]
+        allmask = zeros(data.shape)
+        for polygon,i in zip(polygons,range(len(polygons)):
+            poly_path=Path(polygon)
 
-        polygon=[(y,x) for x,y in zip(x_plot,y_plot)]
-        poly_path=Path(polygon)
+            x, y = mgrid[:height, :width]
+            coors=hstack((x.reshape(-1, 1), y.reshape(-1,1))) # coors.shape is (4000000,2)
 
-        x, y = mgrid[:height, :width]
-        coors=hstack((x.reshape(-1, 1), y.reshape(-1,1))) # coors.shape is (4000000,2)
+            mask = poly_path.contains_points(coors)
+            allmask = allmask+mask.reshape(height, width)*(i+1)
+        plt.imshow(allmask,origin='lower')
 
-        mask = poly_path.contains_points(coors)
-        plt.imshow(mask.reshape(height, width),origin='lower')
-        
 
     plt.draw()
 
@@ -321,3 +325,28 @@ for f in files:
     plt.show()
 
     print("%23s " % f, " ".join("%9.3f" % p for p in list(pars)))
+
+for f in files:
+    if pyds9.ds9_targets()==None:
+        d = pyds9.DS9()
+
+    data = fits.open(f)
+    data = data[0].data
+
+
+    d.set_np2arr(data)
+
+    d.set('rgb green')
+    d.set('scale log')
+#    d.set('scale log exp 50000')
+    d.set('scale limits -10 10000')
+
+    d.set('zoom to fit')
+    d.set('zoom to fit')
+# xpaget ds9 iexam coordinate image
+# TRY:
+# d.get('iexam key coordinate image')
+# d.get('iexam button coordinate image')
+# print outcome -- see what is the specifics of key/button event...
+
+# geometry
