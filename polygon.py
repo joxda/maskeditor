@@ -1,31 +1,22 @@
-import matplotlib.pyplot as plt
 from numpy import *
-from matplotlib.patches import Ellipse
-from matplotlib.lines import Line2D
-from matplotlib.collections import LineCollection
-from matplotlib.image import AxesImage
-from glob import glob
-from astropy.convolution import convolve, Gaussian2DKernel, Tophat2DKernel
-
 from astropy.io import fits
-from random import shuffle
-
-from glob import glob
+import pyds9
+from scipy.ndimage.measurements import label 
+from skimage.measure import approximate_polygon,  find_contours
+from matplotlib.path import Path
 import sys
 
+tolerance = 1.5
+
 files = []
-# xpaget ds9 iexam coordinate image
-# TRY:
-# d.get('iexam coordinate image')
 
-if len(sys.argv)>1:
-    files = glob(sys.argv[1])
+fil =""
+#f len(sys.argv)!=3:
+#   print "HELP"
+if len(sys.argv)==3:
+    fil = sys.argv[1]
+    maskfil = sys.argv[2]
 
-
-
-def rebin(a, shape):
-    sh = shape[0],a.shape[0]//shape[0],shape[1],a.shape[1]//shape[1]
-    return a.reshape(sh).mean(-1).mean(1)
 
 x_plot=[]
 y_plot=[]
@@ -33,320 +24,133 @@ polygons=[]
 data=array([[],[]])
 allmask=array([[],[]])
 
-shift_pressed = False
-i_pressed = False
-
-def on_key(event):
-    global shift_pressed
-    global i_pressed
-    if event.key=="shift":
-        shift_pressed = True
-    if event.key=="i":
-        i_pressed = True
-        print("i")
-
-def off_key(event):
-    global shift_pressed
-    global i_pressed
-    if event.key=="shift":
-        shift_pressed = False
-    if event.key=="i":
-        i_pressed = False
-        print("I")
-
-
-def change_lim(event):
-    global global_vmin
-    global global_vmax
-    global data
-    #print global_vmin
-    if shift_pressed:
-        global_vmax += event.step
-        if global_vmax < global_vmin:
-            global_vmax = global_vmin+0.1
-    else:
-        global_vmin += event.step/10.
-        if global_vmin > global_vmax:
-            global_vmin = global_vmax-0.1
-    elements = plt.gca().get_children()
-    ind_ima = where(array([isinstance(i,AxesImage) for i in elements]))[0]
-    elements[ind_ima[-1]].remove()
-    plt.imshow(log10(data+0.0001), origin='lower', cmap='gray',vmin=global_vmin, vmax=global_vmax)
-    plt.draw()
-
-def isophotal(level):
-    #data_re=rebin(data[0].data,(100,100),)
-    global data
-    tophat_kernel = Tophat2DKernel(5)
-    data_re = convolve(data, tophat_kernel)
-    #data_re = data
-    #print(level)
-    pix_ind=where(floor(log10(data_re)*50)==floor(log10(level)*50))
-    #print(pix_ind)
-    X = array(pix_ind[1])
-    Y = array(pix_ind[0])
-    #plt.plot(X,Y,'.')
-    ipars = fit_ellipse(X,Y)
-    ell = plot_ellipse(plt.gca(),ipars)
-    plt.draw()
-
-def onclick(event):
-  global i_pressed
-  global data
-  global allmask
-  if i_pressed:
-    xpos = int(event.xdata)
-    ypos = int(event.ydata)
-
-    level = median(data[ypos-2:ypos+3,xpos-2:xpos+2])
-
-    isophotal(level)
-  elif shift_pressed:
-    xpos = int(event.xdata)
-    ypos = int(event.ydata)
-
-    mask_value = allmask[ypos,xpos]
-    ind = where(allmask==mask_value)
-    allmask[ind] = 0
-
-
-  else:
-    global x_plot
-    global y_plot
-    global polygons
-    global pars
-    #global data
-    global select_dat
-
-    elements = plt.gca().get_children()
-
-    if event.dblclick:
-        polygons.append([(y,x) for x,y in zip(x_plot,y_plot)])
-    else:
-
-
-        ind_points = where(array([isinstance(i,Line2D) for i in elements]))[0]
-        ind_ellipse = where(array([isinstance(i,Ellipse) for i in elements]))[0]
-        ind_contours = where(array([isinstance(i,LineCollection) for i in elements]))[0]
-
-        #print('%s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
-        #      ('double' if event.dblclick else 'single', event.button,
-        #       event.x, event.y, event.xdata, event.ydata))
-
-        if event.button == 3:
-            polygons = polygons[:-1]
-        else:
-            x_plot.append(event.xdata)
-            y_plot.append(event.ydata)
-            #select_dat.append(median(data[int(event.ydata)-2:int(event.ydata)+3,int(event.xdata)-2:int(event.xdata)+3]))
-
-            #if ind_contours.shape[0]>0:
-               # print ind_contours
-               # cont=[]
-            #    for e in ind_contours:
-            #        cont.append(elements[e])
-            #    for co in cont:
-            #        co.remove()
-
-            #tophat_kernel = Tophat2DKernel(5)
-            #data_re = convolve(data, tophat_kernel)
-            #plt.contour(data_re,[median(select_dat)*0.5,median(select_dat),median(select_dat)*2],alpha=0.5)
-
-#    elements = plt.gca().get_children()
-#    ind_points = where(array([isinstance(i,Line2D) for i in elements]))[0]
-#    ind_ellipse = where(array([isinstance(i,Ellipse) for i in elements]))[0]
-
-        #if ind_points.shape[0] == 0:
-        #    plt.plot(array(x_plot),array(y_plot),'y.')
-        #else:
-        #    #print ind_points
-        #    #print elements[ind_points[0]]
-        #    elements[ind_points[0]].set_data(array(x_plot),array(y_plot))
-
-        #if(len(x_plot)>4):
-        #    pars = fit_ellipse(array(x_plot),array(y_plot))
-        #    if ind_ellipse.shape[0] == 1:
-        #        elements[ind_ellipse[0]].remove()
-        #    ell = plot_ellipse(plt.gca(),pars)
-
-        #    if ind_points.shape[0] == 1:
-        #        plt.plot(pars[0],pars[1],'rx')
-        #    else:
-        #        elements[ind_points[1]].set_data(pars[0],pars[1])
-        from matplotlib.path import Path
-
-        width=data.shape[0]
-        height=data.shape[1]
-        allmask = zeros(data.shape)
-        for polygon,i in zip(polygons,range(len(polygons)):
-            poly_path=Path(polygon)
-
-            x, y = mgrid[:height, :width]
-            coors=hstack((x.reshape(-1, 1), y.reshape(-1,1))) # coors.shape is (4000000,2)
-
-            mask = poly_path.contains_points(coors)
-            allmask = allmask+mask.reshape(height, width)*(i+1)
-        plt.imshow(allmask,origin='lower')
-
-
-    plt.draw()
-
-
-
-#def fit_ansac_ellipse(inX,inY,fixed_center=True):
-
-#    if fixed_center:
-#        min = 3
-#    else:
-#        min = 5
-#
-#    x_cen = data.shape[1]/2
-#    y_cen = data.shape[0]/2
-#
-#    x_sub = list(itertools.combinations(inX, min))
-#    y_sub = list(itertools.combinations(inY, min))
-#
-#    for xsu,ysu in zip(x_sub,ysub):
-#        pell = fit_ellipse(x_sub,y_sub,center_fixed)
-#
-#        theta=arange(0,2*pi,0.02)
-#        allx = pell[2] * pell[4] * cos(theta-radians(pell[3])) + pell[0]
-#        ally = pell[2] * sin(theta-radians(pell[3])) + pell[1]
 
 
 
 
-def fit_ellipse(inX,inY,center_fixed=True):
-    x_cen = data.shape[1]/2
-    y_cen = data.shape[0]/2
 
-    X = array([(inX)]).T-x_cen
-    Y = array([(inY)]).T-y_cen
-
-    #print X.shape
-
-    if center_fixed:
-        A = hstack([X**2, X * Y, Y**2])
-    else:
-        A = hstack([X**2, X * Y, Y**2, X, Y])
-
-    b = ones_like(X)
-
-    out = linalg.lstsq(A, b,rcond=None)
-    #print out[1]
-    x = out[0].squeeze()
-    #print('The ellipse is given by {0:.3}x^2 + {1:.3}xy+{2:.3}y^2+{3:.3}x+{4:.3}y = 1'.format(x[0], x[1],x[2],x[3],x[4]))
-
-
-    A=x[0]
-    B=x[1]
-    C=x[2]
-
-    if center_fixed:
-        D=0
-        E=0
-    else:
-        D=x[3]
-        E=x[4]
-    F=-1
-
-    a = (-sqrt(2*(A*E**2+C*D**2-B*D*E+(B**2-4*A*C)*F)*(A+C+sqrt((A-C)**2+B**2))))/(B**2-4*A*C)
-    b = (-sqrt(2*(A*E**2+C*D**2-B*D*E+(B**2-4*A*C)*F)*(A+C-sqrt((A-C)**2+B**2))))/(B**2-4*A*C)
-
-    X_c = (2*C*D-B*E)/(B**2-4*A*C)+x_cen
-    Y_c = (2*A*E-B*D)/(B**2-4*A*C)+y_cen
-
-
-
-    theta = (0 if A<C else pi) if B==0 else arctan((C-A-sqrt((A-C)**2+B**2))/B)
-
-    theta = degrees(theta)
-
-    # OBS changed to the version installed on the macbook! - even though I dont see why...
-    ba = b/a
-
-    return X_c,Y_c,a,b, theta, ba
-
-
-def plot_ellipse(ax,pars):
-    X_c,Y_c,a,b,theta,ba = pars
-    # OBS changed according to the updated definition of ba
-    ell = Ellipse(xy=(X_c,Y_c),width=2*a,height=2*a*ba,angle=(theta),fill=False,lw=1,zorder=100)
-    ax.add_artist(ell)
-    ell.set_alpha(1.0)
-    ell.set_facecolor((1,0.2,0.2))
-    ell.set_edgecolor((1,0,0))
-    return ell
-
-if files == []:
+if fil == "":
     import tkinter as tk
     from tkinter import filedialog
 
     root = tk.Tk()
     root.withdraw()
     root.update()
-    files = filedialog.askopenfilenames()
+    fil = filedialog.askopenfilename()
+    root.update()
+    maskfil = filedialog.askopenfilename()
     root.update()
 
-#shuffle(list(files))
+
+d = pyds9.DS9('fool')
 
 
-print("# %20s  %9s %9s %8s %8s %9s %3s" % ("filename","x_cen","y_cen","a","b","theta(CCW_from_+x)","b/a"))
+# TBD extensions?
+
+print fil, maskfil
+data = fits.open(fil)[0].data
 
 
-for f in files:
-    #global x_plot
-    #global y_plot
-    #global pars
-    #global data
-    #global global_vmin
-    #global global_vmax
-    pars = ()
 
-    x_plot=[]
-    y_plot=[]
+# work with masks...
+mask =fits.open(maskfil)[0].data
 
-    fig, ax = plt.subplots(figsize=(6, 6))
-    data = fits.open(f)
-    data = data[0].data
-    global_vmin = 0
-    global_vmax = log10(data.max())
-    plt.title(f)
-    plt.imshow(log10(data+0.0001), origin='lower', cmap='gray',vmin=global_vmin)
-        #plt.contour(data,[0.3,0.8,1,10],alpha=0.5)
+mask_bin = (mask>0)
+print mask_bin.shape
+# CHECK UNIQUE VALUES?
+# the value of the mask should possibly remain so that the label is only used for the indexing / selection...
+d.set_np2arr(data)
+
+d.set('scale log')
+d.set('scale limits -10 10000')
+
+d.set('zoom to fit')
 
 
-        #ax.plot(np.random.rand(10))
-    cid = fig.canvas.mpl_connect('button_press_event', onclick)
-    #fig.canvas.mpl_connect('scroll_event',change_lim)
-    #fig.canvas.mpl_connect('key_press_event',on_key)
-    #fig.canvas.mpl_connect('key_release_event',off_key)
+structure = ones((3, 3), dtype=int) # this is for 8 connected... could also be 4 connected?
+structure = array([[0,1,0],[1,1,1],[0,1,0]]) # this is for 4 connected
 
-    plt.show()
+labeled, ncomponents = label(mask_bin.astype(int), structure)
 
-    print("%23s " % f, " ".join("%9.3f" % p for p in list(pars)))
+# TAKE INTO ACCOUNT DISTINCT MASK VALUES...
+# CAN CONNECTED COMPONENTS BE FOUND AND THEN THE INDEX VALUES MADE UNIQUE?
 
-for f in files:
-    if pyds9.ds9_targets()==None:
-        d = pyds9.DS9()
+if ncomponents>1:
+  for i in range(ncomponents)[1:]:
+    
+    test = (labeled==i)*1.0             # this picks one connected component
+    cont = find_contours(test,0.4)      
 
-    data = fits.open(f)
-    data = data[0].data
+    simplier_cont = approximate_polygon(cont[0],tolerance)
+
+    polygons.append([(y,x) for x,y in simplier_cont])
+# possibly only use the polygon approximation in ds9  
+
+# potentially create circle/ellipse/rectangle by middle point / radius or middle points +2 or three corners 
+
+# label -> dilate / open / close / erode...
 
 
-    d.set_np2arr(data)
+inkey=""
+while(inkey!="q"):
+       for polygon,i in zip(polygons,range(len(polygons))):
+            if(len(polygon)>2):
+                print " ".join("%6.2f %6.2f" % (p[0],p[1]) for p in polygon)
+                d.set("region command {polygon %s # color=blue fill=0}" % " ".join("%6.2f %6.2f" % (p[0],p[1]) for p in polygon))
+                print array(polygon)[:,0]
+                d.set('region command {text %6.2f %6.2f # text="%d" color=red}' % (mean(array(polygon)[:,0]),mean(array(polygon)[:,1]),i+1) )# index -> i+1
 
-    d.set('rgb green')
-    d.set('scale log')
-#    d.set('scale log exp 50000')
-    d.set('scale limits -10 10000')
+       for x,y in zip(x_plot,y_plot):
+                    d.set("region command {point %6.2f %6.2f # point=x}" % (x,y))
 
-    d.set('zoom to fit')
-    d.set('zoom to fit')
-# xpaget ds9 iexam coordinate image
-# TRY:
-# d.get('iexam key coordinate image')
-# d.get('iexam button coordinate image')
-# print outcome -- see what is the specifics of key/button event...
+       try:
+           userinput = d.get('iexam key coordinate image').split()
+       except:
+           break
+       inkey = userinput[0].lower()
+       if(inkey=="c"):
+           x_plot.append(float(userinput[1]))
+           y_plot.append(float(userinput[2]))
+       if(inkey=="p"):
+           x_plot.append(float(userinput[1]))
+           y_plot.append(float(userinput[2]))
+           if(len(x_plot)>2):
+               polygons.append([(x,y) for x,y in zip(x_plot,y_plot)])
+               x_plot=[]
+               y_plot=[]
+       if(inkey=="b"):
+           if(len(x_plot)>0):
+              x_plot=x_plot[:-1]
+              y_plot=y_plot[:-1]
+           else:
+              polygons=polygons[:-1]
+       if(inkey=="x" and len(polygons)>0):  # MAYBE EVEN BETTER: DETERMINE WHICH ONE TO DELETE BY THE MOUSE POSITION!! | THEN IN A SIMILAR ERODE|DILATE|OPEN|CLOSE ETC COULD WORK
+            if(len(polygons)==1):
+                polygons=[]
+            else:
+                index=input("Index of polygon to delete:")
+                del polygons[index-1]
+        
+       d.set('regions deleteall')
 
-# geometry
+
+    
+
+width=data.shape[0]
+height=data.shape[1]
+
+allmask = zeros(data.shape) # or input mask... 
+for polygon,i in zip(polygons,range(len(polygons))):
+        poly_path=Path(polygon)
+
+        x, y = mgrid[:height, :width]
+        coors=hstack((y.reshape(-1, 1), x.reshape(-1,1))) 
+
+        mask = poly_path.contains_points(coors)
+        allmask = allmask+mask.reshape(height, width)*(i+1)
+
+hdu = fits.PrimaryHDU(allmask)   ### ADD TO PREVIOUS MASK!
+hdu.writeto("mask1.fits",overwrite=True)
+
+
+
