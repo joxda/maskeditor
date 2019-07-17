@@ -20,10 +20,13 @@ if len(sys.argv)==4:
     maskfil = sys.argv[2]
     maskout = sys.argv[3]
 
+global polygons
+global others
 
 x_plot=[]
 y_plot=[]
 polygons=[]
+others=[]
 in_polygons=[]
 data=array([[],[]])
 allmask=array([[],[]])
@@ -73,7 +76,11 @@ def alt_display():
         nmask = polygon_to_mask(polygon)
         #gg = mask.max() 
         allmask = allmask+nmask*(i+1+gg)
-    #d.set_np2arr(allmask)
+#    for j,other in enumerate(others):
+#        n2mask = other_to_mask(other)
+#        allmask = allmask+n2mask*(j+len(polygons)+1+gg)
+   
+   #d.set_np2arr(allmask)
     dataM = where(allmask>0,where(data-20>0,data/10.,100-data),data)
     d.set_np2arr(dataM)
     #d.set('scale linear')
@@ -123,6 +130,7 @@ def poly_display2():
                     d.set("region command {point %6.2f %6.2f # point=x}" % (x+1,y+1))
 
 def get_polygons(point):
+    global polygons
     ret_poly=[]
     ret_in_poly=[]
     for polygon in polygons:
@@ -143,13 +151,13 @@ def get_polygons(point):
         inret=[value]
     return ret_poly, inret
 
-def mask_to_polygon(mask_bin):
+def mask_to_polygon(mask_bini):
 
 #    structure = ones((3, 3), dtype=int) # this is for 8 connected... could also be 4 connected?
 ###    structure = array([[0,1,0],[1,1,1],[0,1,0]]) # this is for 4 connected
 
-    enlarge = zeros((mask_bin.shape[0]+10,(mask_bin.shape[1]+10)))
-    enlarge[5:-5,5:-5] = mask_bin
+    enlarge = zeros((mask_bini.shape[0]+10,(mask_bini.shape[1]+10)))
+    enlarge[5:-5,5:-5] = mask_bini
 
     labeled, ncomponents = label(enlarge.astype(int), structure)
     offset=0
@@ -180,13 +188,63 @@ def mask_to_polygon(mask_bin):
 #            ret_poly.append([(y-offset,x-offset) for x,y in simplier_cont])
 #       
 
-    cont = find_contours(mask_bin,0.4)
+    cont = find_contours(mask_bini,0.4)
     for c in cont:
         simplier_cont = approximate_polygon(c,tolerance)
         ret_poly.append([(y-offset,x-offset) for x,y in simplier_cont])
 
     return ret_poly,labeled[5:-5,5:-5], ncomponents
 
+def other_to_mask(other):
+   global polygons
+   y, x = mgrid[:height, :width]
+
+   if other[0]=="box":
+      x1 = other[1][0]
+      x2 = other[2][0]
+      y1 = other[1][1]
+      y2 = other[2][1]
+      if x1 > x2:
+         tmp = x1
+         x1 = x2
+         x2 = tmp
+      if y1 > y2:
+         tmp = y1
+         y1 = y2
+         y2 = tmp
+      m = where( (x>=x1) & (x<=x2) & (y>=y1) & (y<=y2), 1, 0 )
+
+   if other[0]=="circle" or other[0]=="ellipse":
+      x_cen = other[1][0]
+      y_cen = other[1][1]
+
+      smi = sqrt( (x_cen-other[2][0])**2 + (y_cen-other[2][1])**2 )
+      sma = smi
+      angle = 0
+
+      if other[0]=="ellipse":
+         angle = arctan2(y_cen-other[2][1],x_cen-other[2][0])-pi/2.
+         angle2 = arctan2(y_cen-other[3][1],x_cen-other[3][0])
+         phi = angle2-angle
+
+         y_a = - (other[3][0]-x_cen)*sin(angle) + (other[3][1]-y_cen)* cos(angle)
+         smi = y_a / sin(phi) 
+         
+      ba = smi/sma
+
+      x=x-x_cen
+      y=y-y_cen
+
+      xcosang = x*cos(angle)
+      xsinang = x*sin(angle)
+      xtemp =  xcosang + y*sin(angle)
+      ytemp = -xsinang + y*cos(angle)
+      dist = sqrt( (xtemp/ba)**2 + (ytemp)**2 )
+      m = where(dist <= sma, 1, 0)
+
+   poly,lab, n = mask_to_polygon(m)
+   polygons.append(poly[0])
+   others=[]
 
 def polypath_to_mask(poly_path):
     x, y = mgrid[:height, :width]
@@ -265,7 +323,7 @@ d.set('scale limits -1 5000')
 
 d.set('zoom to fit')
 d.set('rgb red')
-
+d.set('mode','region')
 #for p in mask_to_polygon(mask_bin):
 #    polygons.append(p)
 # possibly only use the polygon approximation in ds9  
@@ -289,6 +347,29 @@ while(inkey!="q"):
            break
        inkey = userinput[0].lower()
 
+
+       if(inkey=="h"):
+          print("|--------------------------------------|")
+          print("| q - quit editing and write mask file |")
+          print("| h - print this help                  |")
+          print("| r - reset mask                       |")
+          print("| ------------------------------------ |")
+          print("| c - mark point                       |")
+          print("| p - new polygon                      |")
+          print("| 2 - new circle                       |")
+          print("| 3 - new ellipse                      |")
+          print("| 4 - new box                          |")
+          print("| ------------------------------------ |")
+          print("| x - delete masked area               |")
+          print("| d - dilate masked area               |")
+          print("| e - erode masked area                |")
+          print("| b - undo last                        |")
+          print("| ----------- do not use ------------- |")
+          print("| (m - print some statistics)          |")
+          print("| (s - select m regions w triangle     |")
+          print("| (a - select whole image)             |")
+          print("|--------------------------------------|")
+           
        if(inkey=="r"):
            reset_mask()
 
@@ -322,9 +403,40 @@ while(inkey!="q"):
               y_plot=y_plot[:-1]
            else:
               polygons=polygons[:-1] # THIS MAY LEAD TO CONFUSION FOR NON USER DEFINED POLYGONS.... # PROBABLY BEST TO KEEP INPUT MASK AND POLYGONS SEPARATE?
+             # POSSIBLY JUST GET THE INDEX VALUE AT THE COORDINATES....?
+            
+       if(inkey=="2"):
+           x_plot.append(float(userinput[1]))
+           y_plot.append(float(userinput[2]))
+           if(len(x_plot)>=2):
+               others.append(["circle"]+[(x,y) for x,y in zip(x_plot[:2],y_plot[:2])])
+               x_plot=[]
+               y_plot=[]
+               for other in others:
+                  other_to_mask(other)
+               others=[]
+              
+       if(inkey=="3"):
+           x_plot.append(float(userinput[1]))
+           y_plot.append(float(userinput[2]))
+           if(len(x_plot)>2):
+               others.append(["ellipse"]+[(x,y) for x,y in zip(x_plot[:3],y_plot[:3])])
+               x_plot=[]
+               y_plot=[]
+               for other in others:
+                  other_to_mask(other)
+               others=[]
 
-
-            # POSSIBLY JUST GET THE INDEX VALUE AT THE COORDINATES....?
+       if(inkey=="4"):
+           x_plot.append(float(userinput[1]))
+           y_plot.append(float(userinput[2]))
+           if(len(x_plot)>=2):
+               others.append(["box"]+[(x,y) for x,y in zip(x_plot[:2],y_plot[:2])])
+               x_plot=[]
+               y_plot=[]
+               for other in others:
+                  other_to_mask(other)
+               others=[]
 
        if(inkey=="m"):
            # Stats...
@@ -350,8 +462,10 @@ while(inkey!="q"):
                del_poly, del_in = get_polygons((float(userinput[1])-1,float(userinput[2])-1))
            else:
                del_poly, del_in = get_selection()
+               print del_in
 
            for di in del_in:
+                   #ind_del = where(mask_label==di)
                    ind_del = where(mask_label==di)
                    mask[ind_del]=0
                    update_mask()
@@ -359,7 +473,7 @@ while(inkey!="q"):
            for polygon in del_poly: 
                    polygons.remove(polygon)
            sel_poly=[] 
-               
+              
        if(inkey=="d"): 
            if sel_poly==[]:
                dil_poly, dil_in = get_polygons((float(userinput[1])-1,float(userinput[2])-1))
@@ -387,6 +501,12 @@ while(inkey!="q"):
            ind_mod = where(newmask)
            mask[ind_mod]=1
            update_mask()
+
+#       if(inkey=="9"):
+#           d.set("regions system image")
+#           a= d.get("regions","list")
+#           print a
+
 
        if(inkey=="e"): 
            if sel_poly==[]:
@@ -417,15 +537,17 @@ while(inkey!="q"):
            update_mask()
          
 
-
-
 allmask = zeros(data.shape) # or input mask... 
 allmask = mask # or input mask... 
 
+gg = mask.max() 
+
 for polygon,i in zip(polygons,range(len(polygons))):
         nmask = polygon_to_mask(polygon)
-        gg = mask.max() 
         allmask = allmask+nmask*(i+1+gg)
+#for j,other in enumerate(others):
+#        n2mask = other_to_mask(other)
+#        allmask = allmask+n2mask*(j+len(polygons)+1+gg)
 
 hdu = fits.PrimaryHDU(allmask)   ### ADD TO PREVIOUS MASK!
 hdu.writeto(maskout,overwrite=True)
