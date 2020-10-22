@@ -1,5 +1,7 @@
+Some codes I needed for some astro stuff.
+
 # ellipse
+fitting ellipses interactively in various ways on images
 
 # polygon
-
-TEST ALSO WHETHER THE CURSOR EVENTS CAN BE OBTAINED FROM DS9?
+maskeditor with ds9
