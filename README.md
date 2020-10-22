@@ -4,4 +4,4 @@ Some codes I needed for some astro stuff.
 fitting ellipses interactively in various ways on images
 
 # polygon
-maskeditor with ds9
+maskeditor using ds9 bindings in python
